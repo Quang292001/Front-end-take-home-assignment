@@ -1,8 +1,12 @@
 import type { SVGProps } from 'react'
 
+import React, { useState, useRef, useEffect } from 'react'
 import * as Checkbox from '@radix-ui/react-checkbox'
 
 import { api } from '@/utils/client/api'
+
+import SelectButton from './SelectButton'
+import autoAnimate from '@formkit/auto-animate'
 
 /**
  * QUESTION 3:
@@ -64,31 +68,100 @@ import { api } from '@/utils/client/api'
  */
 
 export const TodoList = () => {
-  const { data: todos = [] } = api.todo.getAll.useQuery({
-    statuses: ['completed', 'pending'],
+  const [filter, setFilter] = useState('All')
+
+  const { data: todos = [], refetch } = api.todo.getAll.useQuery({
+    statuses:
+      filter === 'All' ? ['completed', 'pending'] : [filter.toLowerCase()],
   })
 
-  return (
-    <ul className="grid grid-cols-1 gap-y-3">
-      {todos.map((todo) => (
-        <li key={todo.id}>
-          <div className="flex items-center rounded-12 border border-gray-200 px-4 py-3 shadow-sm">
-            <Checkbox.Root
-              id={String(todo.id)}
-              className="flex h-6 w-6 items-center justify-center rounded-6 border border-gray-300 focus:border-gray-700 focus:outline-none data-[state=checked]:border-gray-700 data-[state=checked]:bg-gray-700"
-            >
-              <Checkbox.Indicator>
-                <CheckIcon className="h-4 w-4 text-white" />
-              </Checkbox.Indicator>
-            </Checkbox.Root>
+  const apiContext = api.useContext()
+  const parentRef = useRef(null)
 
-            <label className="block pl-3 font-medium" htmlFor={String(todo.id)}>
-              {todo.body}
-            </label>
-          </div>
-        </li>
-      ))}
-    </ul>
+  useEffect(() => {
+    if (parentRef.current) {
+      autoAnimate(parentRef.current)
+    }
+  }, [parentRef])
+
+  const { mutate: deleteTodo } = api.todo.delete.useMutation({
+    onSuccess: () => {
+      apiContext.todo.getAll.refetch()
+    },
+  })
+  const handleDelete = (todoId) => {
+    deleteTodo({
+      id: todoId,
+    })
+  }
+
+  const { mutate: updateTodoStatus } = api.todoStatus.update.useMutation({
+    onSuccess: () => {
+      apiContext.todo.getAll.refetch()
+    },
+  })
+
+  const handleStatusChange = (todo) => {
+    updateTodoStatus({
+      todoId: todo.id,
+      status: todo.status === 'completed' ? 'pending' : 'completed',
+    })
+  }
+
+  const handleFilterChange = (newFilter) => {
+    setFilter(newFilter)
+  }
+
+  useEffect(() => {
+    refetch()
+  }, [filter, refetch])
+
+  return (
+    <div>
+      <SelectButton
+        activeButton={filter}
+        setActiveButton={handleFilterChange}
+      />
+
+      <ul className="grid grid-cols-1 gap-y-3" ref={parent}>
+        {todos.map((todo) => (
+          <li key={todo.id}>
+            <div
+              className={`flex items-center rounded-12 border border-gray-200 px-4 py-3 shadow-sm ${
+                todo.status === 'completed' ? 'bg-gray-300 line-through' : ''
+              }`}
+            >
+              <Checkbox.Root
+                id={String(todo.id)}
+                className="flex h-6 w-6 items-center justify-center rounded-6 border border-gray-300 focus:border-gray-700 focus:outline-none data-[state=checked]:border-gray-700 data-[state=checked]:bg-gray-700"
+                checked={todo.status === 'completed'}
+                onCheckedChange={() => handleStatusChange(todo)}
+              >
+                <Checkbox.Indicator>
+                  <CheckIcon className="h-4 w-4 text-white" />
+                </Checkbox.Indicator>
+              </Checkbox.Root>
+
+              <label
+                className={`block pl-3 font-medium ${
+                  todo.status === 'completed' ? 'line-through' : ''
+                }`}
+                htmlFor={String(todo.id)}
+              >
+                {todo.body}
+              </label>
+              <button
+                onClick={() => handleDelete(todo.id)}
+                className="ml-auto p-2"
+                aria-label={`Delete todo ${todo.body}`}
+              >
+                <XMarkIcon className="hover:text-red-700 h-5 w-5 text-gray-700" />
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
